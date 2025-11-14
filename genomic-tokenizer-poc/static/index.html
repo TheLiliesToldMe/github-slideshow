@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Genomic Motif Tokenizer · POC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    :root {
+      --bg-dark: #050511;
+      --bg-card: rgba(12, 12, 32, 0.96);
+      --accent-1: #ff6fd8;
+      --accent-2: #3813c2;
+      --accent-3: #40c9ff;
+      --accent-4: #ffb347;
+      --chip-bg: rgba(255, 255, 255, 0.06);
+      --chip-border: rgba(255, 255, 255, 0.18);
+      --text-main: #f8f8ff;
+      --text-muted: #a3a3c2;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --shadow-soft: 0 24px 80px rgba(0, 0, 0, 0.6);
+      --radius-xl: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        sans-serif;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(255, 111, 216, 0.18), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(64, 201, 255, 0.18), transparent 55%),
+        radial-gradient(circle at 100% 0%, rgba(56, 19, 194, 0.24), transparent 55%),
+        #050511;
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 1160px;
+      border-radius: 32px;
+      padding: 24px;
+      background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.12),
+          rgba(255, 255, 255, 0.03)
+        ),
+        radial-gradient(circle at 10% 0%, rgba(255, 111, 216, 0.8), transparent 60%),
+        radial-gradient(circle at 100% 80%, rgba(64, 201, 255, 0.7), transparent 55%);
+      background-blend-mode: screen, normal;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .shell::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: conic-gradient(
+        from 130deg,
+        #ff6fd8,
+        #3813c2,
+        #40c9ff,
+        #ffb347,
+        #ff6fd8
+      );
+      opacity: 0.14;
+      mix-blend-mode: screen;
+      filter: blur(28px);
+      pointer-events: none;
+    }
+
+    .shell-inner {
+      position: relative;
+      background: radial-gradient(circle at 15% 0%, rgba(5, 5, 17, 0.5), transparent 55%),
+        radial-gradient(circle at 85% 100%, rgba(5, 5, 17, 0.8), transparent 55%),
+        rgba(7, 7, 20, 0.96);
+      border-radius: 24px;
+      padding: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(22px);
+    }
+
+    header {
+      margin-bottom: 20px;
+    }
+
+    .title-block h1 {
+      font-size: clamp(1.5rem, 1.8rem, 2rem);
+      letter-spacing: 0.02em;
+    }
+
+    .title-block p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      max-width: 520px;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-subtle);
+      padding: 18px 18px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      background: radial-gradient(
+        circle at 0 0,
+        rgba(255, 255, 255, 0.12),
+        transparent 60%
+      );
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .card-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .textarea-wrap {
+      position: relative;
+      margin-top: 4px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      max-height: 260px;
+      resize: vertical;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(5, 5, 17, 0.86);
+      color: var(--text-main);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .param-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .param-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 15, 30, 0.88);
+    }
+
+    .param-pill input {
+      width: 45px;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-size: 0.75rem;
+      outline: none;
+      text-align: center;
+    }
+
+    .btn-primary {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+      color: #050511;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .btn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #050511;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+
+    .stat-chip {
+      border-radius: 16px;
+      padding: 8px 10px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(10, 10, 26, 0.92);
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.7rem;
+    }
+
+    .stat-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .stat-accent {
+      background: linear-gradient(135deg, var(--accent-3), var(--accent-1));
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    .bar-wrap {
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+
+    .bar-track {
+      width: 100%;
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill-motif {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent-1));
+    }
+
+    .bar-caption {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .token-stream {
+      margin-top: 10px;
+      max-height: 190px;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+      font-size: 0.8rem;
+    }
+
+    .token-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin: 2px;
+      background: rgba(10, 10, 26, 0.9);
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .token-chip.motif {
+      background: radial-gradient(circle at 0 0, rgba(255, 111, 216, 0.28), transparent 60%),
+        rgba(10, 10, 26, 0.9);
+      border-color: rgba(255, 111, 216, 0.65);
+    }
+
+    .token-chip.raw {
+      border-style: dashed;
+      border-color: rgba(255, 255, 255, 0.25);
+      color: var(--text-muted);
+    }
+
+    .token-chip span.index {
+      font-size: 0.7rem;
+      opacity: 0.65;
+      margin-right: 4px;
+    }
+
+    .motif-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .motif-pill {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(18, 18, 40, 0.96);
+      color: var(--text-main);
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-line {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      min-height: 1em;
+    }
+
+    .status-line strong {
+      color: var(--accent-3);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="shell-inner">
+      <header>
+        <div class="title-block">
+          <h1>Genomic Motif Tokenizer</h1>
+          <p>
+            Live view of a genomic-style tokenizer. Your text is decomposed into
+            reusable motifs (genes) and raw bytes, with real compression stats.
+          </p>
+        </div>
+      </header>
+
+      <main>
+        <!-- LEFT: INPUT -->
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Input Text</div>
+              <div class="card-sub">
+                Paste any text to see how motifs and raw bytes are distributed.
+              </div>
+            </div>
+          </div>
+          <div class="textarea-wrap">
+            <textarea id="input-text" placeholder="Type or paste text here to tokenize...">This is a simple test. This is another simple test with repeated phrases.</textarea>
+          </div>
+
+          <div class="controls-row">
+            <div class="param-row">
+              <div class="param-pill">
+                <span>Min motif</span>
+                <input id="min-motif" type="number" min="2" max="32" value="3" />
+              </div>
+              <div class="param-pill">
+                <span>Max motif</span>
+                <input id="max-motif" type="number" min="3" max="64" value="10" />
+              </div>
+              <div class="param-pill">
+                <span>Min freq</span>
+                <input id="min-freq" type="number" min="1" max="1000" value="5" />
+              </div>
+            </div>
+            <button id="run-btn" class="btn-primary">
+              <span class="btn-dot"></span>
+              <span>Run Analysis</span>
+            </button>
+          </div>
+          <div class="status-line" id="status-line">
+            Ready. Click <strong>Run Analysis</strong> to call the backend.
+          </div>
+        </section>
+
+        <!-- RIGHT: OUTPUT -->
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Motif &amp; Token Stats</div>
+              <div class="card-sub">
+                Real data from the backend, no mockups. Visualized as annotated chips.
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-chip">
+              <div class="stat-label">Motif Vocab</div>
+              <div class="stat-value stat-accent" id="vocab-size">–</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-label">Tokens / Byte</div>
+              <div class="stat-value" id="tokens-per-byte">–</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-label">Total Tokens</div>
+              <div class="stat-value" id="tokens-count">–</div>
+            </div>
+          </div>
+
+          <div class="bar-wrap">
+            <div class="bar-track">
+              <div class="bar-fill-motif" id="bar-motif" style="width: 0%"></div>
+            </div>
+            <div class="bar-caption">
+              <span>Motif vs raw-byte tokens</span>
+              <span id="motif-raw-label">–</span>
+            </div>
+          </div>
+
+          <div class="token-stream" id="token-stream">
+            <!-- token chips injected here -->
+          </div>
+
+          <div class="card-sub" style="margin-top: 10px;">Sample motifs</div>
+          <div class="motif-pills" id="motif-pills">
+            <!-- motif pills injected here -->
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const inputText = document.getElementById("input-text");
+    const minMotifEl = document.getElementById("min-motif");
+    const maxMotifEl = document.getElementById("max-motif");
+    const minFreqEl = document.getElementById("min-freq");
+    const runBtn = document.getElementById("run-btn");
+    const statusLine = document.getElementById("status-line");
+
+    const vocabSizeEl = document.getElementById("vocab-size");
+    const tokensPerByteEl = document.getElementById("tokens-per-byte");
+    const tokensCountEl = document.getElementById("tokens-count");
+    const motifRawLabelEl = document.getElementById("motif-raw-label");
+    const barMotifEl = document.getElementById("bar-motif");
+    const tokenStreamEl = document.getElementById("token-stream");
+    const motifPillsEl = document.getElementById("motif-pills");
+
+    async function runAnalysis() {
+      const text = inputText.value || "";
+      const minMotif = parseInt(minMotifEl.value || "3", 10);
+      const maxMotif = parseInt(maxMotifEl.value || "10", 10);
+      const minFreq = parseInt(minFreqEl.value || "5", 10);
+
+      if (!text.trim()) {
+        statusLine.textContent = "Please enter some text before running the analysis.";
+        return;
+      }
+
+      statusLine.textContent = "Calling backend /api/tokenize…";
+
+      const payload = {
+        text: text,
+        min_motif_len: minMotif,
+        max_motif_len: maxMotif,
+        min_freq: minFreq,
+        max_vocab_size: 2000
+      };
+
+      try {
+        const res = await fetch("/api/tokenize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const msg = `Backend error: ${res.status}`;
+          statusLine.textContent = msg;
+          console.error(msg);
+          return;
+        }
+
+        const data = await res.json();
+        renderResults(data);
+        statusLine.textContent = "Analysis complete. Data pulled live from backend.";
+      } catch (err) {
+        console.error(err);
+        statusLine.textContent = "Request failed. Check console / network tab.";
+      }
+    }
+
+    function renderResults(data) {
+      const {
+        tokens,
+        vocab_size,
+        bytes_count,
+        tokens_count,
+        tokens_per_byte,
+        motif_tokens_count,
+        raw_tokens_count,
+        sample_motifs
+      } = data;
+
+      vocabSizeEl.textContent = String(vocab_size);
+      tokensPerByteEl.textContent = tokens_per_byte.toFixed(3);
+      tokensCountEl.textContent = String(tokens_count);
+
+      const motifRatio = tokens_count > 0 ? (motif_tokens_count / tokens_count) * 100 : 0;
+      barMotifEl.style.width = motifRatio.toFixed(1) + "%";
+      motifRawLabelEl.textContent =
+        `${motif_tokens_count} motif · ${raw_tokens_count} raw · ` +
+        `${motifRatio.toFixed(1)}% motifs`;
+
+      tokenStreamEl.innerHTML = "";
+      const maxChips = 120;
+      tokens.slice(0, maxChips).forEach((t, i) => {
+        const chip = document.createElement("div");
+        chip.classList.add("token-chip");
+        if (t >= 0) {
+          chip.classList.add("motif");
+        } else {
+          chip.classList.add("raw");
+        }
+
+        const indexSpan = document.createElement("span");
+        indexSpan.classList.add("index");
+        indexSpan.textContent = "#" + i;
+        chip.appendChild(indexSpan);
+
+        const idSpan = document.createElement("span");
+        idSpan.textContent = t >= 0 ? `M${t}` : `raw(${t})`;
+        chip.appendChild(idSpan);
+
+        tokenStreamEl.appendChild(chip);
+      });
+
+      if (tokens.length > maxChips) {
+        const more = document.createElement("div");
+        more.classList.add("card-sub");
+        more.style.marginTop = "6px";
+        more.textContent = `…and ${tokens.length - maxChips} more tokens.`;
+        tokenStreamEl.appendChild(more);
+      }
+
+      motifPillsEl.innerHTML = "";
+      sample_motifs.forEach((m) => {
+        const pill = document.createElement("div");
+        pill.classList.add("motif-pill");
+        pill.textContent = m || "⟨non-printable motif⟩";
+        motifPillsEl.appendChild(pill);
+      });
+    }
+
+    runBtn.addEventListener("click", () => {
+      runAnalysis();
+    });
+
+    window.addEventListener("load", () => {
+      runAnalysis();
+    });
+  </script>
+</body>
+</html>
